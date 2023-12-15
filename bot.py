@@ -1,13 +1,9 @@
 import json
 import os
-import telebot
-from telebot import types
-import module_name
 from telebot.apihelper import send_photo
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 import random
-
 
 # Пути к JSON-файлам
 users_file_path = 'users.json'
@@ -98,7 +94,7 @@ def dislike(update: Update, context):
     # Сохранение данных после обновления
     save_to_json(users, users_file_path)
 
-    send_photo(update, context, user_id)
+    browse_photos(update, context)
 
 
 def main():
