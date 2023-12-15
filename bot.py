@@ -1,13 +1,9 @@
 import json
 import os
-import telebot
-from telebot import types
-import module_name
 from telebot.apihelper import send_photo
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
 import random
-
 
 # Пути к JSON-файлам
 users_file_path = 'users.json'
@@ -78,6 +74,7 @@ def browse_photos(update: Update, context):
 
 
 def like(update: Update, context):
+    user_name = update.callback_query.from_user.username
     user_id = update.callback_query.from_user.id
     liked_user = int(update.callback_query.data.split('_')[1])
     if liked_user not in likes:
@@ -85,7 +82,7 @@ def like(update: Update, context):
     likes[liked_user].append(user_id)
     if user_id in likes and liked_user in likes[user_id]:
         context.bot.send_message(chat_id=user_id, text=f"Ура! 🎉 Взаимный лайк с {liked_user}. Начните общение!")
-        context.bot.send_message(chat_id=liked_user, text=f"Ура! 🎉 Взаимный лайк с {user_id}. Начните общение!")
+        context.bot.send_message(chat_id=liked_user, text=f"Ура! 🎉 Взаимный лайк с {user_name}. Начните общение!")
     else:
         update.callback_query.answer("Лайк учтен! Давайте продолжим.")
 
@@ -98,7 +95,7 @@ def dislike(update: Update, context):
     # Сохранение данных после обновления
     save_to_json(users, users_file_path)
 
-    send_photo(update, context, user_id)
+    browse_photos(update, context)
 
 
 def main():
