@@ -65,8 +65,8 @@ def browse_photos(update: Update, context):
         random_user = random.choice(unseen_users)
         users[user_id]['seen'].append(random_user)
         reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Лайк ❤️", callback_data=f'like_{random_user}')],
-            [InlineKeyboardButton("Дизлайк 🚫", callback_data=f'dislike_{random_user}')],
+            [InlineKeyboardButton("Лайк ❤️", callback_data='browse')],
+            [InlineKeyboardButton("Дизлайк 🚫", callback_data='browse')],
         ])
         context.bot.send_photo(chat_id=user_id, photo=photos[random_user], reply_markup=reply_markup)
     else:
@@ -82,7 +82,7 @@ def like(update: Update, context):
     likes[liked_user].append(user_id)
     if user_id in likes and liked_user in likes[user_id]:
         context.bot.send_message(chat_id=user_id, text=f"Ура! 🎉 Взаимный лайк с {liked_user}. Начните общение!")
-        context.bot.send_message(chat_id=liked_user, text=f"Ура! 🎉 Взаимный лайк с {user_name}. Начните общение!")
+        context.bot.send_message(chat_id=liked_user, text=f"Ура! 🎉 Взаимный лайк с {'@' + user_name}. Начните общение!")
     else:
         update.callback_query.answer("Лайк учтен! Давайте продолжим.")
 
