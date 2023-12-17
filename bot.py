@@ -1,18 +1,24 @@
 import json
 import os
-from telebot.apihelper import send_photo
-from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters
+import tempfile
+import cv2
+import numpy as np
+from PIL import Image
+from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup, bot
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
 import random
+from deepface import DeepFace
+
 
 # Пути к JSON-файлам
-users_file_path = 'users.json'
-photos_file_path = 'photos.json'
-likes_file_path = 'likes.json'
+users_file_path = 'C:\\Users\\ilona\\PycharmProjects\\tgBotPython\\users.json'
+photos_file_path = 'C:\\Users\\ilona\\PycharmProjects\\tgBotPython\\photos.json'
+likes_file_path = 'C:\\Users\\ilona\\PycharmProjects\\tgBotPython\\likes.json'
 
 
 # Функция для сохранения данных в JSON-файл
 def save_to_json(data, file_path):
+    print("fdfd")
     with open(file_path, 'w') as json_file:
         json.dump(data, json_file)
 
@@ -58,6 +64,35 @@ def photo_received(update: Update, context):
     update.message.reply_text("Отлично! Теперь выбери действие:", reply_markup=reply_markup)
 
 
+def save_temp_file(photo_file):
+    temp_dir = tempfile.gettempdir()
+    temp_file_path = os.path.join(temp_dir, 'temp_photo.jpg')
+    photo_file.save(temp_file_path)
+    return temp_file_path
+
+
+def get_gender(photo_file):
+    temp_file_path = save_temp_file(photo_file)
+    result = DeepFace.analyze(temp_file_path, actions=['gender'])
+    os.remove(temp_file_path)
+    gender = result[0]['dominant_gender']
+    return gender
+
+
+def has_face(photo_file):
+    print("Я тут")
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+    # Конвертируем BytesIO в массив numpy
+    image = Image.open(photo_file)
+    image_np = np.array(image)
+    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+    print(len(faces))
+    return len(faces) > 0
+
+
 def browse_photos(update: Update, context):
     user_id = update.callback_query.from_user.id
     unseen_users = [u for u in photos if u != user_id and u not in users[user_id]['seen']]
@@ -65,8 +100,8 @@ def browse_photos(update: Update, context):
         random_user = random.choice(unseen_users)
         users[user_id]['seen'].append(random_user)
         reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Лайк ❤️", callback_data='browse')],
-            [InlineKeyboardButton("Дизлайк 🚫", callback_data='browse')],
+            [InlineKeyboardButton("Лайк ❤️", callback_data='like')],
+            [InlineKeyboardButton("Дизлайк 🚫", callback_data=f'dislike_{random_user}')],
         ])
         context.bot.send_photo(chat_id=user_id, photo=photos[random_user], reply_markup=reply_markup)
     else:
@@ -88,6 +123,7 @@ def like(update: Update, context):
 
 
 def dislike(update: Update, context):
+    print("fdjbvv")
     user_id = update.callback_query.from_user.id
     disliked_user = int(update.callback_query.data.split('_')[1])
     users[user_id]['seen'].append(disliked_user)  # добавляем пользователя в список просмотренных
@@ -107,6 +143,7 @@ def main():
     dp.add_handler(MessageHandler(Filters.photo, photo_received))
     dp.add_handler(CallbackQueryHandler(browse_photos, pattern='^browse$'))
     dp.add_handler(CallbackQueryHandler(like, pattern='^like_\d+$'))
+    dp.add_handler(CallbackQueryHandler(dislike, pattern='^dislike_\d+$'))
 
     updater.start_polling()
     updater.idle()
