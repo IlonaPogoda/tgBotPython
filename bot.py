@@ -38,22 +38,49 @@ likes = load_from_json(likes_file_path)
 
 
 def start(update: Update, context):
-    user_id = update.message.from_user.id
-    if user_id not in users:
-        users[user_id] = {'photo': None, 'seen': []}
+
+    show_reg_message(update)
+
+
+def show_reg_message(update: Update):
+
     reply_markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("Регистрация", callback_data='register')]
     ])
-    update.message.reply_text("Привет! 😄 Давай начнем знакомство? Сначала загрузи свою фотографию!", reply_markup=reply_markup)
+    a = "Привет! 😄 Давай начнем знакомство? Сначала загрузи свою фотографию!"
+    if update.message is not None:
+        update.message.reply_text(a, reply_markup=reply_markup)
+    elif update.callback_query is not None:
+        update.callback_query.message.reply_text(a, reply_markup=reply_markup)
+
+
+def show_start_message(update: Update):
+    a = "Привет, вы еще не зарегестрированы, введите /start"
+    if update.message is not None:
+        update.message.reply_text(a)
+    elif update.callback_query is not None:
+        update.callback_query.message.reply_text(a)
 
 
 def register(update: Update, context):
+    user_name = update.callback_query.from_user.username
     user_id = update.callback_query.from_user.id
-    update.callback_query.message.reply_text("Отправь мне свою фотографию!")
+    if user_id not in users:
+        users[user_id] = {'photo': None, 'seen': [], 'username': user_name}
+        update.callback_query.message.reply_text("Отправь мне свою фотографию!")
+    else:
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Знакомиться", callback_data='browse')],
+            [InlineKeyboardButton("Хватит", callback_data='stop')]
+        ])
+        update.callback_query.message.reply_text("Вы уже зарегистрированы", reply_markup=reply_markup)
+    save_to_json(users, users_file_path)
 
 
 def photo_received(update: Update, context):
     user_id = update.message.from_user.id
+    if not validate_user(update, user_id):
+        return
     photo_id = update.message.photo[-1].file_id
     users[user_id]['photo'] = photo_id
     photos[user_id] = photo_id
@@ -62,6 +89,8 @@ def photo_received(update: Update, context):
         [InlineKeyboardButton("Хватит", callback_data='stop')]
     ])
     update.message.reply_text("Отлично! Теперь выбери действие:", reply_markup=reply_markup)
+    save_to_json(users, users_file_path)
+    save_to_json(photos, photos_file_path)
 
 
 def save_temp_file(photo_file):
@@ -95,12 +124,14 @@ def has_face(photo_file):
 
 def browse_photos(update: Update, context):
     user_id = update.callback_query.from_user.id
+    if not validate_user(update, user_id):
+        return
     unseen_users = [u for u in photos if u != user_id and u not in users[user_id]['seen']]
     if unseen_users:
         random_user = random.choice(unseen_users)
         users[user_id]['seen'].append(random_user)
         reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Лайк ❤️", callback_data='like')],
+            [InlineKeyboardButton("Лайк ❤️", callback_data=f'like_{random_user}')],
             [InlineKeyboardButton("Дизлайк 🚫", callback_data=f'dislike_{random_user}')],
         ])
         context.bot.send_photo(chat_id=user_id, photo=photos[random_user], reply_markup=reply_markup)
@@ -109,29 +140,42 @@ def browse_photos(update: Update, context):
 
 
 def like(update: Update, context):
-    user_name = update.callback_query.from_user.username
     user_id = update.callback_query.from_user.id
+    if not validate_user(update, user_id):
+        return
+    print("bsgdh")
+    user_name = update.callback_query.from_user.username
     liked_user = int(update.callback_query.data.split('_')[1])
     if liked_user not in likes:
         likes[liked_user] = []
     likes[liked_user].append(user_id)
     if user_id in likes and liked_user in likes[user_id]:
-        context.bot.send_message(chat_id=user_id, text=f"Ура! 🎉 Взаимный лайк с {liked_user}. Начните общение!")
+        context.bot.send_message(chat_id=user_id, text=f"Ура! 🎉 Взаимный лайк с {'@' + users[liked_user]['username']}. Начните общение!")
         context.bot.send_message(chat_id=liked_user, text=f"Ура! 🎉 Взаимный лайк с {'@' + user_name}. Начните общение!")
     else:
         update.callback_query.answer("Лайк учтен! Давайте продолжим.")
+    save_to_json(likes, likes_file_path)
 
 
 def dislike(update: Update, context):
-    print("fdjbvv")
     user_id = update.callback_query.from_user.id
+    if not validate_user(update, user_id):
+        return
+    print("fdjbvv")
     disliked_user = int(update.callback_query.data.split('_')[1])
     users[user_id]['seen'].append(disliked_user)  # добавляем пользователя в список просмотренных
-
     # Сохранение данных после обновления
     save_to_json(users, users_file_path)
 
     browse_photos(update, context)
+
+
+def validate_user(update: Update, user_id):
+    print(users)
+    if user_id not in users:
+        show_start_message(update)
+        return False
+    return True
 
 
 def main():
