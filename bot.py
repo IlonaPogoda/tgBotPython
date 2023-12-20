@@ -1,6 +1,8 @@
 import json
 import os
 import tempfile
+import urllib
+
 import cv2
 import numpy as np
 from PIL import Image
@@ -54,6 +56,29 @@ def show_reg_message(update: Update):
         update.callback_query.message.reply_text(a, reply_markup=reply_markup)
 
 
+def unregister(update: Update, context):
+    user_id = get_user_id(update)
+    if user_id in users:
+        del users[user_id]
+        if user_id in photos:
+            del photos[user_id]
+        if user_id in likes:
+            del likes[user_id]
+        update.message.reply_text("Аккаунт удален")
+        save_to_json(users, users_file_path)
+    else:
+        update.message.reply_text("Вас не существует")
+
+
+def get_user_id(update: Update):
+    if update.message is not None:
+        return str(update.message.from_user.id)
+    elif update.callback_query is not None:
+        return str(update.callback_query.from_user.id)
+    else:
+        raise Exception("User not defined")
+
+
 def show_start_message(update: Update):
     a = "Привет, вы еще не зарегестрированы, введите /start"
     if update.message is not None:
@@ -64,7 +89,7 @@ def show_start_message(update: Update):
 
 def register(update: Update, context):
     user_name = update.callback_query.from_user.username
-    user_id = update.callback_query.from_user.id
+    user_id = get_user_id(update)
     if user_id not in users:
         users[user_id] = {'photo': None, 'seen': [], 'username': user_name}
         update.callback_query.message.reply_text("Отправь мне свою фотографию!")
@@ -77,11 +102,31 @@ def register(update: Update, context):
     save_to_json(users, users_file_path)
 
 
+def has_face(photo_file):
+    print("Я тут")
+    face_cascade = cv2.CascadeClassifier('C:\\Users\\ilona\\PycharmProjects\\tgBotPython\\venv\\Lib\\site-packages\\cv2\\data\\haarcascade_frontalface_default.xml')
+
+    # Конвертируем BytesIO в массив numpy
+
+    image = Image.open(photo_file)
+    image_np = np.array(image)
+    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+    print(faces)
+    return len(faces) > 0
+
+
 def photo_received(update: Update, context):
-    user_id = update.message.from_user.id
+    user_id = get_user_id(update)
     if not validate_user(update, user_id):
         return
     photo_id = update.message.photo[-1].file_id
+    saver = save_photo(update)
+    if not has_face(saver):
+        update.message.reply_text("На фото должно быть лицо")
+        return
+    #save_file("C:\\Users\\ilona\\PycharmProjects\\tgBotPython\\", photo_id)
     users[user_id]['photo'] = photo_id
     photos[user_id] = photo_id
     reply_markup = InlineKeyboardMarkup([
@@ -108,22 +153,8 @@ def get_gender(photo_file):
     return gender
 
 
-def has_face(photo_file):
-    print("Я тут")
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-
-    # Конвертируем BytesIO в массив numpy
-    image = Image.open(photo_file)
-    image_np = np.array(image)
-    gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
-
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-    print(len(faces))
-    return len(faces) > 0
-
-
 def browse_photos(update: Update, context):
-    user_id = update.callback_query.from_user.id
+    user_id = get_user_id(update)
     if not validate_user(update, user_id):
         return
     unseen_users = [u for u in photos if u != user_id and u not in users[user_id]['seen']]
@@ -140,12 +171,12 @@ def browse_photos(update: Update, context):
 
 
 def like(update: Update, context):
-    user_id = update.callback_query.from_user.id
+    user_id = get_user_id(update)
     if not validate_user(update, user_id):
         return
     print("bsgdh")
     user_name = update.callback_query.from_user.username
-    liked_user = int(update.callback_query.data.split('_')[1])
+    liked_user = str(update.callback_query.data.split('_')[1])
     if liked_user not in likes:
         likes[liked_user] = []
     likes[liked_user].append(user_id)
@@ -158,7 +189,7 @@ def like(update: Update, context):
 
 
 def dislike(update: Update, context):
-    user_id = update.callback_query.from_user.id
+    user_id = get_user_id(update)
     if not validate_user(update, user_id):
         return
     print("fdjbvv")
@@ -168,6 +199,13 @@ def dislike(update: Update, context):
     save_to_json(users, users_file_path)
 
     browse_photos(update, context)
+
+
+def save_photo(update: Update):
+    file = update.message.photo[-1].get_file()
+    file_path = 'C:\\Users\\ilona\\PycharmProjects\\tgBotPython\\photo\\temp.jpg'
+    file.download(file_path)
+    return file_path
 
 
 def validate_user(update: Update, user_id):
@@ -183,12 +221,14 @@ def main():
 
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("unregister", unregister))
     dp.add_handler(CallbackQueryHandler(register, pattern='^register$'))
     dp.add_handler(MessageHandler(Filters.photo, photo_received))
     dp.add_handler(CallbackQueryHandler(browse_photos, pattern='^browse$'))
     dp.add_handler(CallbackQueryHandler(like, pattern='^like_\d+$'))
     dp.add_handler(CallbackQueryHandler(dislike, pattern='^dislike_\d+$'))
 
+    has_face('C:\\Users\\ilona\\Pictures\\Untitled Export\\IMG_5425.jpg')
     updater.start_polling()
     updater.idle()
 
